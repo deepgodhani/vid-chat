@@ -4,7 +4,7 @@ import io from "socket.io-client"
 import "./App.css"
 
 // Point to Localhost for now. We change this LATER for Vercel.
-const socket = io.connect("http://localhost:5000")
+const socket = io.connect("https://vid-chat-backend-3lm5.onrender.com")
 
 function App() {
 	const [me, setMe] = useState("")
