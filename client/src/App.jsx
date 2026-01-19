@@ -44,12 +44,18 @@ function App() {
 		})
 	}, [])
 
-	const callUser = (id) => {
-		const peer = new Peer({
-			initiator: true,
-			trickle: false,
-			stream: stream,
-		})
+  const callUser = (id) => {
+    const peer = new Peer({
+        initiator: true,
+        trickle: false,
+        stream: stream,
+        config: {
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" },
+                { urls: "stun:global.stun.twilio.com:3478" }
+            ]
+        }
+    })
 
 		peer.on("signal", (data) => {
 			socket.emit("callUser", {
@@ -73,15 +79,19 @@ function App() {
 
 		connectionRef.current = peer
 	}
-
-	const answerCall = () => {
-		setCallAccepted(true)
-		const peer = new Peer({
-			initiator: false,
-			trickle: false,
-			stream: stream,
-		})
-
+  const answerCall = () => {
+    setCallAccepted(true)
+    const peer = new Peer({
+        initiator: false,
+        trickle: false,
+        stream: stream,
+        config: {
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" },
+                { urls: "stun:global.stun.twilio.com:3478" }
+            ]
+        }
+    })
 		peer.on("signal", (data) => {
 			socket.emit("answerCall", { signal: data, to: caller })
 		})
