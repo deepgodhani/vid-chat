@@ -23,17 +23,30 @@ function App() {
 
 	useEffect(() => {
 		// 1. Get Video Stream
-		navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-			setStream(stream)
-			if (myVideo.current) {
-				myVideo.current.srcObject = stream
-			}
-		})
-
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then((stream) => {
+      setStream(stream)
+              // We keep this, but it often fails because 'myVideo.current' is null here
+      if (myVideo.current) {
+        myVideo.current.srcObject = stream
+      }
+    })
+          .catch((err) => {
+              // THIS IS NEW: Log permission errors
+              console.error("CAMERA ERROR:", err)
+              alert("Camera failed: " + err.message)
+          })
 		// 2. Get ID
 		socket.on("me", (id) => {
 			setMe(id)
 		})
+
+    // NEW: Whenever 'stream' is ready, attach it to the video tag
+	useEffect(() => {
+		if (myVideo.current && stream) {
+			myVideo.current.srcObject = stream
+		}
+	}, [stream]) // This runs every time 'stream' updates
 
 		// 3. Listen for Call
 		socket.on("callUser", (data) => {
