@@ -2,37 +2,45 @@ const express = require("express");
 const http = require("http");
 const app = express();
 const server = http.createServer(app);
-
-const io = require("socket.io")(server, {
+const socket = require("socket.io");
+const io = socket(server, {
     cors: {
-        origin: "*", // Allow ALL connections (Solves the Vercel error)
+        origin: "*",
         methods: ["GET", "POST"]
     }
 });
 
-io.on("connection", (socket) => {
-    // 1. Send the user their own ID
-    socket.emit("me", socket.id);
+const rooms = {};
 
-    // 2. Disconnect handler
-    socket.on("disconnect", () => {
-        socket.broadcast.emit("callEnded");
+io.on("connection", socket => {
+    // 1. Join Room Event
+    socket.on("join room", roomID => {
+        if (rooms[roomID]) {
+            rooms[roomID].push(socket.id);
+        } else {
+            rooms[roomID] = [socket.id];
+        }
+        const otherUser = rooms[roomID].find(id => id !== socket.id);
+        if (otherUser) {
+            socket.emit("other user", otherUser);
+            socket.to(otherUser).emit("user joined", socket.id);
+        }
     });
 
-    // 3. Call User
-    socket.on("callUser", (data) => {
-        io.to(data.userToCall).emit("callUser", { 
-            signal: data.signalData, 
-            from: data.from, 
-            name: data.name 
-        });
+    // 2. Relay Offer (The Call)
+    socket.on("offer", payload => {
+        io.to(payload.target).emit("offer", payload);
     });
 
-    // 4. Answer Call
-    socket.on("answerCall", (data) => {
-        io.to(data.to).emit("callAccepted", data.signal);
+    // 3. Relay Answer (The Response)
+    socket.on("answer", payload => {
+        io.to(payload.target).emit("answer", payload);
+    });
+
+    // 4. Relay ICE Candidates (Connectivity Info)
+    socket.on("ice-candidate", incoming => {
+        io.to(incoming.target).emit("ice-candidate", incoming.candidate);
     });
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(5000, () => console.log('server is running on port 5000'));

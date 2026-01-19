@@ -1,159 +1,24 @@
-import React, { useEffect, useRef, useState } from "react"
-import Peer from "simple-peer"
-import io from "socket.io-client"
-import "./App.css"
-
-// Point to Localhost for now. We change this LATER for Vercel.
-const socket = io.connect("https://vid-chat-backend-3lm5.onrender.com")
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Login from './pages/Login';
+import Home from './pages/Home';
+import Room from './pages/Room';
+import PrivateRoute from './components/PrivateRoute'; // We will build this
 
 function App() {
-	const [me, setMe] = useState("")
-	const [stream, setStream] = useState()
-	const [receivingCall, setReceivingCall] = useState(false)
-	const [caller, setCaller] = useState("")
-	const [callerSignal, setCallerSignal] = useState()
-	const [callAccepted, setCallAccepted] = useState(false)
-	const [idToCall, setIdToCall] = useState("")
-	const [callEnded, setCallEnded] = useState(false)
-	const [name, setName] = useState("")
-
-	const myVideo = useRef()
-	const userVideo = useRef()
-	const connectionRef = useRef()
-
-	useEffect(() => {
-		navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-			.then((stream) => {
-				setStream(stream)
-				// We try to attach it here immediately, just in case
-				if (myVideo.current) {
-					myVideo.current.srcObject = stream
-				}
-			})
-			.catch((err) => {
-				console.error("CAMERA ERROR:", err)
-			})
-
-		socket.on("me", (id) => {
-			setMe(id)
-		})
-
-		socket.on("callUser", (data) => {
-			setReceivingCall(true)
-			setCaller(data.from)
-			setName(data.name)
-			setCallerSignal(data.signal)
-		})
-	}, [])
-
-	// 2. SECOND EFFECT: Watch for Stream Changes (MOVED OUTSIDE)
-	useEffect(() => {
-		if (myVideo.current && stream) {
-			myVideo.current.srcObject = stream
-		}
-	}, [stream])
-
-  const callUser = (id) => {
-    const peer = new Peer({
-        initiator: true,
-        trickle: false,
-        stream: stream,
-        config: {
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                { urls: "stun:global.stun.twilio.com:3478" }
-            ]
-        }
-    })
-
-		peer.on("signal", (data) => {
-			socket.emit("callUser", {
-				userToCall: id,
-				signalData: data,
-				from: me,
-				name: name,
-			})
-		})
-
-		peer.on("stream", (stream) => {
-			if (userVideo.current) {
-				userVideo.current.srcObject = stream
-			}
-		})
-
-		socket.on("callAccepted", (signal) => {
-			setCallAccepted(true)
-			peer.signal(signal)
-		})
-
-		connectionRef.current = peer
-	}
-  const answerCall = () => {
-    setCallAccepted(true)
-    const peer = new Peer({
-        initiator: false,
-        trickle: false,
-        stream: stream,
-        config: {
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                { urls: "stun:global.stun.twilio.com:3478" }
-            ]
-        }
-    })
-		peer.on("signal", (data) => {
-			socket.emit("answerCall", { signal: data, to: caller })
-		})
-
-		peer.on("stream", (stream) => {
-			if (userVideo.current) {
-				userVideo.current.srcObject = stream
-			}
-		})
-
-		peer.signal(callerSignal)
-		connectionRef.current = peer
-	}
-
-	return (
-		<div style={{ textAlign: "center", padding: "50px" }}>
-			<h1>Video Chat V2</h1>
-			<div className="video-container">
-				<div className="video">
-					{stream && <video playsInline muted ref={myVideo} autoPlay style={{ width: "300px" }} />}
-				</div>
-				<div className="video">
-					{callAccepted && !callEnded ? (
-						<video playsInline ref={userVideo} autoPlay style={{ width: "300px" }} />
-					) : null}
-				</div>
-			</div>
-			
-			<div className="myId">
-				<h3>My ID: {me}</h3>
-				<input
-					id="filled-basic"
-					placeholder="ID to call"
-					value={idToCall}
-					onChange={(e) => setIdToCall(e.target.value)}
-				/>
-				<button variant="contained" color="primary" onClick={() => callUser(idToCall)}>
-					Call
-				</button>
-			</div>
-
-			<div>
-				{receivingCall && !callAccepted ? (
-						<div className="caller">
-						<h1 >Incoming Call...</h1>
-						<button variant="contained" color="primary" onClick={answerCall}>
-							Answer
-						</button>
-					</div>
-				) : null}
-			</div>
-		</div>
-	)
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        
+        {/* Protected Routes (Only logged in users can see these) */}
+        <Route element={<PrivateRoute />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/room/:roomId" element={<Room />} />
+        </Route>
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;

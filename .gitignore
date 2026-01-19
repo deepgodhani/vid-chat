@@ -1,5 +1,14 @@
-node_modules
+.DS_Store
+
+# Security
 .env
+.env.local
+.env.*
+
+# Dependencies
+node_modules
+npm-debug.log
+
+# Build outputs
 dist
 build
-.DS_Store
