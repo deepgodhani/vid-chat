@@ -4,21 +4,19 @@ import Peer from "simple-peer";
 import { useParams } from "react-router-dom";
 import { Mic, MicOff, Video as VideoIcon, VideoOff } from "lucide-react";
 
-// Point to your Render Backend
+// Point this to your backend URL
 const socket = io.connect("https://vid-chat-backend-3lm5.onrender.com");
 
-// Helper component to render each peer's video
+// Component to render a single peer's video
 const Video = ({ peer }) => {
     const ref = useRef();
-
     useEffect(() => {
         peer.on("stream", stream => {
             ref.current.srcObject = stream;
         });
     }, [peer]);
-
     return (
-        <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700 min-w-[300px]">
+        <div className="bg-black rounded-lg overflow-hidden border border-gray-700 relative w-full h-full min-h-[200px]">
             <video playsInline autoPlay ref={ref} className="w-full h-full object-cover" />
         </div>
     );
@@ -32,7 +30,7 @@ const Room = () => {
     const [isVideoMuted, setIsVideoMuted] = useState(false);
     
     const userVideo = useRef();
-    const peersRef = useRef([]); // Stores peer objects to prevent stale state
+    const peersRef = useRef([]); // Keeps track of peers without triggering re-renders
 
     useEffect(() => {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
@@ -43,7 +41,7 @@ const Room = () => {
 
             socket.emit("join room", roomId);
 
-            // 1. Receive list of existing users
+            // 1. You joined: Receive list of existing users
             socket.on("all users", users => {
                 const peers = [];
                 users.forEach(userID => {
@@ -60,36 +58,40 @@ const Room = () => {
                 setPeers(peers);
             });
 
-            // 2. Someone else joined (receive their offer)
+            // 2. Someone else joined: Receive their signal (Offer)
             socket.on("user joined", payload => {
                 const peer = addPeer(payload.signal, payload.callerID, stream);
                 peersRef.current.push({
                     peerID: payload.callerID,
                     peer,
                 });
-                // Use function update to ensure we have previous state
                 setPeers(users => [...users, { peerID: payload.callerID, peer }]);
             });
 
-            // 3. Receive the answer to our offer
+            // 3. Handshake: Receive the answer to your offer
             socket.on("receiving returned signal", payload => {
                 const item = peersRef.current.find(p => p.peerID === payload.id);
-                item.peer.signal(payload.signal);
+                if (item) {
+                    item.peer.signal(payload.signal);
+                }
             });
             
-             // 4. Handle user disconnect (Optional: remove video)
-            socket.on("user left", id => {
-                const peerObj = peersRef.current.find(p => p.peerID === id);
-                if(peerObj) peerObj.peer.destroy();
-                const newPeers = peersRef.current.filter(p => p.peerID !== id);
-                peersRef.current = newPeers;
-                setPeers(newPeers);
-            });
-
+             // 4. Handle Disconnect
+             socket.on("user left", id => {
+                 const peerObj = peersRef.current.find(p => p.peerID === id);
+                 if(peerObj) peerObj.peer.destroy();
+                 const newPeers = peersRef.current.filter(p => p.peerID !== id);
+                 peersRef.current = newPeers;
+                 setPeers(newPeers); // Update UI
+             });
         });
-    }, [roomId]);
+        
+        // Cleanup on unmount
+        return () => {
+            socket.disconnect();
+        };
+    }, []);
 
-    // Create a Peer (Initiator) - You are calling them
     function createPeer(userToSignal, callerID, stream) {
         const peer = new Peer({
             initiator: true,
@@ -105,7 +107,6 @@ const Room = () => {
         return peer;
     }
 
-    // Add a Peer (Not Initiator) - They called you
     function addPeer(incomingSignal, callerID, stream) {
         const peer = new Peer({
             initiator: false,
@@ -124,46 +125,43 @@ const Room = () => {
     }
 
     const toggleMute = () => {
-        if(userStream) {
+        if (userStream) {
             userStream.getAudioTracks()[0].enabled = !userStream.getAudioTracks()[0].enabled;
             setIsAudioMuted(!isAudioMuted);
         }
     };
 
     const toggleVideo = () => {
-        if(userStream) {
+        if (userStream) {
             userStream.getVideoTracks()[0].enabled = !userStream.getVideoTracks()[0].enabled;
             setIsVideoMuted(!isVideoMuted);
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 flex flex-col items-center p-4">
-            <h1 className="text-white mb-4 font-bold">Room ID: {roomId}</h1>
-            
-            {/* Grid Container for Videos */}
-            <div className="flex flex-wrap gap-4 w-full max-w-6xl justify-center items-center h-full">
-                
-                {/* My Video */}
-                <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700 min-w-[300px]">
-                    <video muted ref={userVideo} autoPlay playsInline className="w-full h-full object-cover" />
-                    <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 rounded">You</div>
-                </div>
-
-                {/* Other Users' Videos */}
-                {peers.map((peer, index) => {
-                    return (
-                        <Video key={peer.peerID} peer={peer.peer} />
-                    );
-                })}
+        <div className="bg-gray-900 min-h-screen p-4 flex flex-col justify-between">
+            <div className="flex justify-between items-center mb-4 px-4">
+                 <h1 className="text-white text-xl font-bold">Meeting Room: {roomId}</h1>
+                 <span className="text-gray-400 text-sm">{peers.length + 1} Participants</span>
             </div>
 
-            {/* Controls */}
-            <div className="fixed bottom-8 flex gap-4">
-                <button onClick={toggleMute} className={`p-4 rounded-full ${isAudioMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white transition`}>
+            {/* Video Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-grow p-4">
+                <div className="bg-black rounded-lg overflow-hidden border border-gray-700 relative min-h-[200px]">
+                    <video muted ref={userVideo} autoPlay playsInline className="w-full h-full object-cover" />
+                    <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 py-1 text-sm rounded">You</div>
+                </div>
+                {peers.map((peer) => (
+                    <Video key={peer.peerID} peer={peer.peer} />
+                ))}
+            </div>
+
+            {/* Controls Bar */}
+            <div className="flex justify-center gap-6 pb-6 mt-4">
+                <button onClick={toggleMute} className={`p-4 rounded-full ${isAudioMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white shadow-lg transition-all`}>
                     {isAudioMuted ? <MicOff /> : <Mic />}
                 </button>
-                <button onClick={toggleVideo} className={`p-4 rounded-full ${isVideoMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white transition`}>
+                <button onClick={toggleVideo} className={`p-4 rounded-full ${isVideoMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white shadow-lg transition-all`}>
                     {isVideoMuted ? <VideoOff /> : <VideoIcon />}
                 </button>
             </div>

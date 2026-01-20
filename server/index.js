@@ -10,43 +10,41 @@ const io = socket(server, {
     }
 });
 
-const rooms = {};
+const users = {}; // Key: Room ID, Value: Array of Socket IDs
 
 io.on("connection", socket => {
     socket.on("join room", roomID => {
-        if (rooms[roomID]) {
-            rooms[roomID].push(socket.id);
+        if (users[roomID]) {
+            users[roomID].push(socket.id);
         } else {
-            rooms[roomID] = [socket.id];
+            users[roomID] = [socket.id];
         }
         
-        // Get all other users in this room
-        const usersInRoom = rooms[roomID].filter(id => id !== socket.id);
-        
-        // Send the list of existing users to the new client
-        socket.emit("all users", usersInRoom);
+        // 1. Send the array of OTHER users to the new joiner
+        const usersInThisRoom = users[roomID].filter(id => id !== socket.id);
+        socket.emit("all users", usersInThisRoom);
     });
 
-    // Relay the offer from the initiator to a specific user
-    socket.emit("sending signal", payload => {
+    // 2. Relay the signal (Offer) from New User -> Existing User
+    socket.on("sending signal", payload => {
         io.to(payload.userToSignal).emit('user joined', { signal: payload.signal, callerID: payload.callerID });
     });
 
-    // Relay the answer back to the initiator
+    // 3. Relay the signal (Answer) from Existing User -> New User
     socket.on("returning signal", payload => {
         io.to(payload.callerID).emit('receiving returned signal', { signal: payload.signal, id: socket.id });
     });
 
     socket.on("disconnect", () => {
         // Remove user from all rooms
-        for (let key in rooms) {
-            const index = rooms[key].indexOf(socket.id);
-            if (index >= 0) {
-                rooms[key].splice(index, 1);
+        for (const roomID in users) {
+            let roomUsers = users[roomID];
+            if (roomUsers.includes(socket.id)) {
+                users[roomID] = roomUsers.filter(id => id !== socket.id);
+                // Optional: Notify others that user left to remove their video
+                socket.broadcast.emit("user left", socket.id);
             }
         }
-        // Notify others that this user left (Optional but recommended for cleanup)
-        socket.broadcast.emit("user left", socket.id); 
     });
 });
 

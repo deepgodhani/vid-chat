@@ -1,18 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    nodePolyfills({
-      global: true,
-      process: true,
-      buffer: true,
-    }),
-  ],
-  // REMOVED the "define" block to avoid conflicts
+  plugins: [react()],
+  define: {
+    // simple-peer requires this to work in the browser
+    global: 'window',
+  },
   resolve: {
     alias: {
       process: "process/browser",
