@@ -17,14 +17,13 @@ const Room = () => {
     const myVideo = useRef();
     const userVideo = useRef();
     const connectionRef = useRef();
-    const streamRef = useRef(); // <--- NEW: Stores the stream safely
+    const streamRef = useRef(); // <--- FIX 1: Store stream in Ref
 
     useEffect(() => {
         // 1. Get User Media
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((currentStream) => {
-            // Save stream to State (for UI) AND Ref (for Logic)
             setStream(currentStream);
-            streamRef.current = currentStream; 
+            streamRef.current = currentStream; // <--- FIX 2: Save to Ref
             
             if (myVideo.current) {
                 myVideo.current.srcObject = currentStream;
@@ -33,22 +32,16 @@ const Room = () => {
             // 2. Join the Room
             socket.emit("join room", roomId);
 
-            // 3. Listeners inside the .then() to ensure stream is ready
-            socket.on("other user", (otherUserID) => {
-                callUser(otherUserID);
-            });
-
-            socket.on("user joined", (userID) => {
-                console.log("User joined:", userID);
-            });
-
+            // 3. Setup Listeners
+            socket.on("other user", (otherUserID) => callUser(otherUserID));
+            socket.on("user joined", (userID) => console.log("User joined:", userID));
             socket.on("offer", handleReceiveCall);
             socket.on("answer", handleAnswer);
             socket.on("ice-candidate", handleNewICECandidateMsg);
 
         }).catch(err => console.error("Media Error:", err));
 
-        // Cleanup on unmount
+        // Cleanup
         return () => {
             socket.off("other user");
             socket.off("user joined");
@@ -58,10 +51,8 @@ const Room = () => {
         };
     }, [roomId]);
 
-    // --- Core WebRTC Functions ---
-
     function callUser(userID) {
-        // Use streamRef.current to get the LATEST stream
+        // FIX 3: Use streamRef.current (The LIVE stream)
         const peer = new Peer({
             initiator: true,
             trickle: false,
@@ -85,7 +76,7 @@ const Room = () => {
     }
 
     function handleReceiveCall(payload) {
-        // Use streamRef.current here too!
+        // FIX 4: Use streamRef.current here too
         const peer = new Peer({
             initiator: false,
             trickle: false,
@@ -117,7 +108,6 @@ const Room = () => {
         }
     }
 
-    // --- Controls ---
     const toggleMute = () => {
         if(streamRef.current) {
             streamRef.current.getAudioTracks()[0].enabled = !streamRef.current.getAudioTracks()[0].enabled;
@@ -135,26 +125,19 @@ const Room = () => {
     return (
         <div className="h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
             <h1 className="text-white mb-4 font-bold">Room ID: {roomId}</h1>
-            
             <div className="flex flex-col md:flex-row gap-4 w-full max-w-4xl h-[60vh]">
                 <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700">
                     <video muted ref={myVideo} autoPlay playsInline className="w-full h-full object-cover" />
                     <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 rounded">You</div>
                 </div>
-
                 <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700">
                     <video ref={userVideo} autoPlay playsInline className="w-full h-full object-cover" />
                     <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 rounded">Peer</div>
                 </div>
             </div>
-
             <div className="mt-8 flex gap-4">
-                <button onClick={toggleMute} className={`p-4 rounded-full ${isAudioMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white transition`}>
-                    {isAudioMuted ? <MicOff /> : <Mic />}
-                </button>
-                <button onClick={toggleVideo} className={`p-4 rounded-full ${isVideoMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white transition`}>
-                    {isVideoMuted ? <VideoOff /> : <Video />}
-                </button>
+                <button onClick={toggleMute} className={`p-4 rounded-full ${isAudioMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white transition`}>{isAudioMuted ? <MicOff /> : <Mic />}</button>
+                <button onClick={toggleVideo} className={`p-4 rounded-full ${isVideoMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white transition`}>{isVideoMuted ? <VideoOff /> : <Video />}</button>
             </div>
         </div>
     );
