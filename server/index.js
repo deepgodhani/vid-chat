@@ -14,39 +14,39 @@ const rooms = {};
 
 io.on("connection", socket => {
     socket.on("join room", roomID => {
-        if (!rooms[roomID]) {
-            rooms[roomID] = [];
-        }
-        if (!rooms[roomID].includes(socket.id)) {
+        if (rooms[roomID]) {
             rooms[roomID].push(socket.id);
+        } else {
+            rooms[roomID] = [socket.id];
         }
-        const otherUser = rooms[roomID].find(id => id !== socket.id);
-        if (otherUser) {
-            socket.emit("other user", otherUser);
-            socket.to(otherUser).emit("user joined", socket.id);
-        }
+        
+        // Get all other users in this room
+        const usersInRoom = rooms[roomID].filter(id => id !== socket.id);
+        
+        // Send the list of existing users to the new client
+        socket.emit("all users", usersInRoom);
     });
 
-    socket.on("offer", payload => {
-        io.to(payload.target).emit("offer", payload);
+    // Relay the offer from the initiator to a specific user
+    socket.emit("sending signal", payload => {
+        io.to(payload.userToSignal).emit('user joined', { signal: payload.signal, callerID: payload.callerID });
     });
 
-    socket.on("answer", payload => {
-        io.to(payload.target).emit("answer", payload);
+    // Relay the answer back to the initiator
+    socket.on("returning signal", payload => {
+        io.to(payload.callerID).emit('receiving returned signal', { signal: payload.signal, id: socket.id });
     });
 
-    socket.on("ice-candidate", incoming => {
-        io.to(incoming.target).emit("ice-candidate", incoming.candidate);
-    });
-
-    // FIX: Remove user on disconnect
     socket.on("disconnect", () => {
+        // Remove user from all rooms
         for (let key in rooms) {
             const index = rooms[key].indexOf(socket.id);
             if (index >= 0) {
                 rooms[key].splice(index, 1);
             }
         }
+        // Notify others that this user left (Optional but recommended for cleanup)
+        socket.broadcast.emit("user left", socket.id); 
     });
 });
 
