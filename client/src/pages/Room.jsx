@@ -5,7 +5,7 @@ import { useParams } from "react-router-dom";
 import { Mic, MicOff, Video, VideoOff } from "lucide-react";
 
 // Use your Render Backend URL here
-const socket = io.connect("https://video-chat-backend-v2.onrender.com");
+const socket = io.connect("https://vid-chat-backend-3lm5.onrender.com");
 
 const Room = () => {
     const { roomId } = useParams();
