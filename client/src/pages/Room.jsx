@@ -4,7 +4,7 @@ import Peer from "simple-peer";
 import { useParams } from "react-router-dom";
 import { Mic, MicOff, Video, VideoOff } from "lucide-react";
 
-// Use your Render Backend URL here
+// Point to your Render Backend
 const socket = io.connect("https://vid-chat-backend-3lm5.onrender.com");
 
 const Room = () => {
@@ -13,28 +13,32 @@ const Room = () => {
     const [isAudioMuted, setIsAudioMuted] = useState(false);
     const [isVideoMuted, setIsVideoMuted] = useState(false);
     
+    // REFS - These keep track of the latest values without re-rendering
     const myVideo = useRef();
     const userVideo = useRef();
     const connectionRef = useRef();
+    const streamRef = useRef(); // <--- NEW: Stores the stream safely
 
     useEffect(() => {
-        // 1. Get User Media (Camera/Mic)
+        // 1. Get User Media
         navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((currentStream) => {
+            // Save stream to State (for UI) AND Ref (for Logic)
             setStream(currentStream);
+            streamRef.current = currentStream; 
+            
             if (myVideo.current) {
                 myVideo.current.srcObject = currentStream;
             }
 
-            // 2. Join the Room once we have the stream
+            // 2. Join the Room
             socket.emit("join room", roomId);
 
-            // 3. Setup Listeners
+            // 3. Listeners inside the .then() to ensure stream is ready
             socket.on("other user", (otherUserID) => {
-                callUser(otherUserID, currentStream);
+                callUser(otherUserID);
             });
 
             socket.on("user joined", (userID) => {
-                // Wait for them to call us
                 console.log("User joined:", userID);
             });
 
@@ -44,7 +48,7 @@ const Room = () => {
 
         }).catch(err => console.error("Media Error:", err));
 
-        // Cleanup
+        // Cleanup on unmount
         return () => {
             socket.off("other user");
             socket.off("user joined");
@@ -56,11 +60,12 @@ const Room = () => {
 
     // --- Core WebRTC Functions ---
 
-    function callUser(userID, stream) {
+    function callUser(userID) {
+        // Use streamRef.current to get the LATEST stream
         const peer = new Peer({
             initiator: true,
             trickle: false,
-            stream: stream,
+            stream: streamRef.current, 
             config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }
         });
 
@@ -80,10 +85,11 @@ const Room = () => {
     }
 
     function handleReceiveCall(payload) {
+        // Use streamRef.current here too!
         const peer = new Peer({
             initiator: false,
             trickle: false,
-            stream: stream, // This might be stale due to closure, usually solved with useRef or better state mgmt, but works for simple case
+            stream: streamRef.current, 
             config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }
         });
 
@@ -113,13 +119,17 @@ const Room = () => {
 
     // --- Controls ---
     const toggleMute = () => {
-        stream.getAudioTracks()[0].enabled = !stream.getAudioTracks()[0].enabled;
-        setIsAudioMuted(!isAudioMuted);
+        if(streamRef.current) {
+            streamRef.current.getAudioTracks()[0].enabled = !streamRef.current.getAudioTracks()[0].enabled;
+            setIsAudioMuted(!isAudioMuted);
+        }
     };
 
     const toggleVideo = () => {
-        stream.getVideoTracks()[0].enabled = !stream.getVideoTracks()[0].enabled;
-        setIsVideoMuted(!isVideoMuted);
+        if(streamRef.current) {
+            streamRef.current.getVideoTracks()[0].enabled = !streamRef.current.getVideoTracks()[0].enabled;
+            setIsVideoMuted(!isVideoMuted);
+        }
     };
 
     return (
@@ -127,20 +137,17 @@ const Room = () => {
             <h1 className="text-white mb-4 font-bold">Room ID: {roomId}</h1>
             
             <div className="flex flex-col md:flex-row gap-4 w-full max-w-4xl h-[60vh]">
-                {/* My Video */}
                 <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700">
                     <video muted ref={myVideo} autoPlay playsInline className="w-full h-full object-cover" />
                     <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 rounded">You</div>
                 </div>
 
-                {/* Other User Video */}
                 <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-gray-700">
                     <video ref={userVideo} autoPlay playsInline className="w-full h-full object-cover" />
                     <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 rounded">Peer</div>
                 </div>
             </div>
 
-            {/* Controls Bar */}
             <div className="mt-8 flex gap-4">
                 <button onClick={toggleMute} className={`p-4 rounded-full ${isAudioMuted ? 'bg-red-500' : 'bg-gray-700 hover:bg-gray-600'} text-white transition`}>
                     {isAudioMuted ? <MicOff /> : <Mic />}
