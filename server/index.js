@@ -13,40 +13,40 @@ const io = socket(server, {
 const rooms = {};
 
 io.on("connection", socket => {
-    // 1. Join Room Event
+    // 1. Join Room Event (With Duplicate Fix)
     socket.on("join room", roomID => {
-        // Initialize room if it doesn't exist
         if (!rooms[roomID]) {
             rooms[roomID] = [];
         }
 
-        // FIX: Only add the user if they are NOT already in the room
+        // Only add user if they aren't already there
         if (!rooms[roomID].includes(socket.id)) {
-             rooms[roomID].push(socket.id);
-             
-             // Only notify others if this is a NEW join
-             const otherUser = rooms[roomID].find(id => id !== socket.id);
-             if (otherUser) {
-                 socket.emit("other user", otherUser);
-                 socket.to(otherUser).emit("user joined", socket.id);
-             }
+            rooms[roomID].push(socket.id);
+        }
+
+        // Notify the OTHER user (if exists)
+        const otherUser = rooms[roomID].find(id => id !== socket.id);
+        if (otherUser) {
+            socket.emit("other user", otherUser);
+            socket.to(otherUser).emit("user joined", socket.id);
         }
     });
 
-    // 2. Relay Offer (The Call)
+    // 2. Offer (Call)
     socket.on("offer", payload => {
         io.to(payload.target).emit("offer", payload);
     });
 
-    // 3. Relay Answer (The Response)
+    // 3. Answer (Response)
     socket.on("answer", payload => {
         io.to(payload.target).emit("answer", payload);
     });
 
-    // 4. Relay ICE Candidates (Connectivity Info)
+    // 4. ICE Candidate (Connection Info)
     socket.on("ice-candidate", incoming => {
         io.to(incoming.target).emit("ice-candidate", incoming.candidate);
     });
 });
 
-server.listen(5000, () => console.log('server is running on port 5000'));
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
