@@ -15,15 +15,21 @@ const rooms = {};
 io.on("connection", socket => {
     // 1. Join Room Event
     socket.on("join room", roomID => {
-        if (rooms[roomID]) {
-            rooms[roomID].push(socket.id);
-        } else {
-            rooms[roomID] = [socket.id];
+        // Initialize room if it doesn't exist
+        if (!rooms[roomID]) {
+            rooms[roomID] = [];
         }
-        const otherUser = rooms[roomID].find(id => id !== socket.id);
-        if (otherUser) {
-            socket.emit("other user", otherUser);
-            socket.to(otherUser).emit("user joined", socket.id);
+
+        // FIX: Only add the user if they are NOT already in the room
+        if (!rooms[roomID].includes(socket.id)) {
+             rooms[roomID].push(socket.id);
+             
+             // Only notify others if this is a NEW join
+             const otherUser = rooms[roomID].find(id => id !== socket.id);
+             if (otherUser) {
+                 socket.emit("other user", otherUser);
+                 socket.to(otherUser).emit("user joined", socket.id);
+             }
         }
     });
 
