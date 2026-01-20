@@ -15,10 +15,10 @@ const Login = () => {
     const { error } = await supabase.auth.signInWithOtp({
       email: email,
       options: {
-        // This redirects them back to your app after clicking the email link
         emailRedirectTo: window.location.origin, 
       }
     });
+    console.log(window.location.origin);
 
     if (error) {
       alert(error.error_description || error.message);
