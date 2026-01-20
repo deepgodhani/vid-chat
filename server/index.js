@@ -13,18 +13,18 @@ const io = socket(server, {
 const rooms = {};
 
 io.on("connection", socket => {
-    // 1. Join Room Event (With Duplicate Fix)
+    // 1. Join Room
     socket.on("join room", roomID => {
         if (!rooms[roomID]) {
             rooms[roomID] = [];
         }
 
-        // Only add user if they aren't already there
+        // Add user if not already there
         if (!rooms[roomID].includes(socket.id)) {
             rooms[roomID].push(socket.id);
         }
 
-        // Notify the OTHER user (if exists)
+        // Find the OTHER user (who is NOT me)
         const otherUser = rooms[roomID].find(id => id !== socket.id);
         if (otherUser) {
             socket.emit("other user", otherUser);
@@ -32,19 +32,30 @@ io.on("connection", socket => {
         }
     });
 
-    // 2. Offer (Call)
+    // 2. Offer
     socket.on("offer", payload => {
         io.to(payload.target).emit("offer", payload);
     });
 
-    // 3. Answer (Response)
+    // 3. Answer
     socket.on("answer", payload => {
         io.to(payload.target).emit("answer", payload);
     });
 
-    // 4. ICE Candidate (Connection Info)
+    // 4. ICE Candidate
     socket.on("ice-candidate", incoming => {
         io.to(incoming.target).emit("ice-candidate", incoming.candidate);
+    });
+
+    // 5. DISCONNECT HANDLER (The Fix)
+    socket.on("disconnect", () => {
+        // Go through all rooms and remove this user
+        for (let roomID in rooms) {
+            let index = rooms[roomID].indexOf(socket.id);
+            if (index >= 0) {
+                rooms[roomID].splice(index, 1);
+            }
+        }
     });
 });
 
