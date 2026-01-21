@@ -1,14 +1,6 @@
 const mediasoup = require("mediasoup");
 require("dotenv").config();
-/**
- * Minimal mediasoup "room" registry (in-memory).
- * Each room -> { id, router, peers: Map<socketId, peerState> }
- *
- * peerState:
- * - transports: Map<transportId, transport>
- * - producers: Map<producerId, producer>
- * - consumers: Map<consumerId, consumer>
- */
+
 const rooms = new Map();
 
 const mediaCodecs = [
@@ -104,7 +96,6 @@ async function createWebRtcTransport(router) {
     enableTcp: true,
     preferUdp: true,
 
-    // ✅ important for many setups (including same-machine)
     rtcpMux: true,
     comedia: true,
 

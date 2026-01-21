@@ -14,6 +14,7 @@ const Home = () => {
   const joinMeeting = (e) => {
     e.preventDefault();
     if (roomId.trim()) navigate(`/room/${roomId}`);
+    
   };
 
   return (
