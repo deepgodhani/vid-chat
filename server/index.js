@@ -14,7 +14,7 @@ const {
   cleanupPeer,
 } = require("./mediasoup");
 
-// ✅ lock CORS to your deployed frontend
+// lock CORS to your deployed frontend
 const ALLOWED_ORIGINS = (process.env.CLIENT_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
@@ -87,9 +87,7 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("chat:message", msg);
   });
 
-  /**
-   * ========== mediasoup SFU events ==========
-   */
+
 
   socket.on("sfu:join", async ({ roomId }, cb) => {
     try {
@@ -236,7 +234,6 @@ io.on("connection", (socket) => {
         paused: true,
       });
 
-      // ❌ REMOVE THIS (it was incorrectly nested here):
       // socket.on("sfu:leave", async ({ roomId }, cb) => { ... });
 
       peer.consumers.set(consumer.id, consumer);
@@ -304,7 +301,6 @@ io.on("connection", (socket) => {
           cleanupPeer(room, socket.id);
         }
     } catch {
-      // ignore
     }
   });
 });
