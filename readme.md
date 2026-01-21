@@ -201,5 +201,3 @@ Some browsers block autoplay audio until you interact with the page.
 
 ---
 
-## License
-ISC (current package.json). Adjust as needed.
