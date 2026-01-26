@@ -151,10 +151,16 @@ const Room = () => {
 
     // --- Define STUN Servers (Google's Free Ones) ---
     const iceServers = [
+      // Google STUN (Keep this as backup)
       { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
+      
+      // YOUR Self-Hosted TURN Server
+      {
+        urls: "turn:vid-chat.centralindia.cloudapp.azure.com:3478",
+        username: "vidchat",
+        credential: "vidchat123",
+      },
     ];
-
     // ------- SEND transport -------
     const sendRes = await sfuRequest("sfu:createTransport", { roomId, direction: "send" });
     if (sendRes?.error) throw new Error(sendRes.error);
