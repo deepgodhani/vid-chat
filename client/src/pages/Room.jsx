@@ -144,65 +144,71 @@ const Room = () => {
   async function createDeviceAndTransports() {
     const joinRes = await sfuRequest("sfu:join", { roomId });
     if (joinRes?.error) throw new Error(joinRes.error);
-  
+
     const device = new mediasoupClient.Device();
     await device.load({ routerRtpCapabilities: joinRes.rtpCapabilities });
     deviceRef.current = device;
-  
+
+    // --- Define STUN Servers (Google's Free Ones) ---
+    const iceServers = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
+
     // ------- SEND transport -------
     const sendRes = await sfuRequest("sfu:createTransport", { roomId, direction: "send" });
     if (sendRes?.error) throw new Error(sendRes.error);
-  
-    // ✅ pass ONLY the fields mediasoup-client expects
+
     const sendTransport = device.createSendTransport({
       id: sendRes.id,
       iceParameters: sendRes.iceParameters,
       iceCandidates: sendRes.iceCandidates,
       dtlsParameters: sendRes.dtlsParameters,
-      // optional but safe:
+      iceServers: iceServers, // <--- ADD THIS LINE
       appData: { direction: "send" },
     });
-  
+
     sendTransport.on("connectionstatechange", (state) => {
       console.log("[sendTransport] connectionstatechange:", state);
     });
-  
+
     sendTransport.on("connect", ({ dtlsParameters }, cb, errCb) => {
       sfuRequest("sfu:connectTransport", { roomId, transportId: sendTransport.id, dtlsParameters })
         .then((r) => (r?.error ? errCb(new Error(r.error)) : cb()))
         .catch(errCb);
     });
-  
+
     sendTransport.on("produce", ({ kind, rtpParameters, appData }, cb, errCb) => {
       sfuRequest("sfu:produce", { roomId, transportId: sendTransport.id, kind, rtpParameters, appData })
         .then((r) => (r?.error ? errCb(new Error(r.error)) : cb({ id: r.id })))
         .catch(errCb);
     });
-  
+
     sendTransportRef.current = sendTransport;
-  
+
     // ------- RECV transport -------
     const recvRes = await sfuRequest("sfu:createTransport", { roomId, direction: "recv" });
     if (recvRes?.error) throw new Error(recvRes.error);
-  
+
     const recvTransport = device.createRecvTransport({
       id: recvRes.id,
       iceParameters: recvRes.iceParameters,
       iceCandidates: recvRes.iceCandidates,
       dtlsParameters: recvRes.dtlsParameters,
+      iceServers: iceServers, // <--- ADD THIS LINE
       appData: { direction: "recv" },
     });
-  
+
     recvTransport.on("connectionstatechange", (state) => {
       console.log("[recvTransport] connectionstatechange:", state);
     });
-  
+
     recvTransport.on("connect", ({ dtlsParameters }, cb, errCb) => {
       sfuRequest("sfu:connectTransport", { roomId, transportId: recvTransport.id, dtlsParameters })
         .then((r) => (r?.error ? errCb(new Error(r.error)) : cb()))
         .catch(errCb);
     });
-  
+
     recvTransportRef.current = recvTransport;
   }
 
