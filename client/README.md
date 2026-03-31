@@ -4,7 +4,7 @@ The browser-side half of vid-chat: handles camera/microphone capture, WebRTC tra
 
 ---
 
-## Demo / Screenshot
+## Demo 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -56,9 +56,7 @@ Most WebRTC tutorials stop at a two-peer mesh demo. This client was built to wir
 | Signaling transport | socket.io-client 4 |
 | Styling | Tailwind CSS (utility classes) + styled-components |
 | Icons | Lucide React |
-| Auth | @supabase/supabase-js 2 |
 | Unique IDs | uuid |
-| Polyfills | vite-plugin-node-polyfills (for `process`, `Buffer` in browser) |
 
 ---
 
@@ -78,13 +76,9 @@ npm install
 
 ### 2. Create `.env.local`
 
-```env
-VITE_SIGNALING_URL=http://localhost:5000
-VITE_SUPABASE_URL=YOUR_SUPABASE_PROJECT_URL
-VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 ```
 
-> Supabase variables are only required if you use the `/login` route. The meeting room itself works without them.
+```
 
 ### 3. Start the dev server
 
