@@ -1,79 +1,78 @@
-# Video Chat v2 (SFU) — Current Stable Stage
+# vid-chat — Real-time video conferencing powered by a WebRTC SFU
 
-This repo contains a **WebRTC video meeting app** built with:
-- **Client:** React + Vite
-- **Signaling:** Socket.IO
-- **SFU:** mediasoup (server relays media streams; not mesh)
-
-At this stage the **core infrastructure is stable**:
-- Join a room and publish **audio + video** via mediasoup
-- Consume other participants’ **audio + video**
-- In-room **chat** (temporary in-memory history)
-- Clean up producers/consumers/transports on leave/disconnect
+A full-stack browser-based video meeting app where every participant's media is routed through a **Selective Forwarding Unit (SFU)** instead of a fragile peer-to-peer mesh, making it scale gracefully to many participants.
 
 ---
 
-## Project Structure
+## Demo / Architecture
 
 ```
-video-chat-v2/
-  client/        # React UI (Vite)
-  server/        # Express + Socket.IO + mediasoup SFU
-  README.md
+Browser A                   Node.js Server                 Browser B
+─────────                   ──────────────                 ─────────
+getUserMedia()              Express + Socket.IO            getUserMedia()
+    │                            │                              │
+    ├──── sfu:join ─────────────►│◄──────── sfu:join ──────────┤
+    │◄─── rtpCapabilities ───────┤──────── rtpCapabilities ────►│
+    │                            │                              │
+    ├──── sfu:createTransport ──►│◄─── sfu:createTransport ─────┤
+    │◄─── DTLS/ICE params ───────┤──── DTLS/ICE params ────────►│
+    │                            │                              │
+    ├──── sfu:produce (audio) ──►│                              │
+    ├──── sfu:produce (video) ──►│──── sfu:newProducer ────────►│
+    │                            │                              │
+    │                            │◄─── sfu:consume ─────────────┤
+    │                            │──── RTP params ─────────────►│
+    │◄══════════ media (VP8 + Opus) ══════════════════════════►│
+    │                            │                              │
+    │◄──── chat:message ─────────┤──── chat:message ───────────►│
 ```
 
-### Client (`/client`)
-Key files:
-- `src/pages/Home.jsx` — landing page (create/join room)
-- `src/pages/Room.jsx` — meeting room: mediasoup join/produce/consume + chat
-- `src/components/VideoTile.jsx` — video rendering (MediaStream -> <video>)
-- `src/components/AudioTile.jsx` — remote audio playback (MediaStream -> <audio>)
+---
 
-### Server (`/server`)
-Key files:
-- `index.js` — Socket.IO signaling + chat + mediasoup events
-- `mediasoup.js` — creates mediasoup worker/router/transports and manages rooms/peers
+## Why I Built This
+
+Standard peer-to-peer WebRTC (mesh topology) breaks down quickly: each new participant adds _N_ additional upload streams to every existing peer. An SFU solves this by having each client upload **once** to the server, which then forwards selectively to every other subscriber. This project was built to learn how mediasoup implements that model end-to-end — from WebRTC transport negotiation and DTLS/ICE, all the way up to a React UI with real-time chat.
 
 ---
 
-## How Media Works (SFU)
+## Key Technical Highlights
 
-High-level flow:
-1. Client connects to Socket.IO (`VITE_SIGNALING_URL`)
-2. Client joins SFU room: `sfu:join` → receives router RTP capabilities
-3. Client creates 2 transports:
-   - `sfu:createTransport` (send)
-   - `sfu:createTransport` (recv)
-4. Client connects transports via DTLS:
-   - `sfu:connectTransport`
-5. Client captures local media:
-   - `getUserMedia({ audio: true, video: true })`
-6. Client produces tracks:
-   - `sfu:produce` for audio + video
-7. Client discovers remote producers:
-   - fetch existing via `sfu:getProducers`
-   - listen for `sfu:newProducer`
-8. Client consumes:
-   - `sfu:consume` → creates consumer (paused)
-   - `sfu:resume` → starts media flow
-9. Rendering:
-   - local preview uses `<VideoTile stream={userStream} muted />`
-   - remote audio uses `<AudioTile stream={remoteStream} />`
-   - remote video uses `<VideoTile stream={remoteStream} muted />`
+- **SFU architecture via mediasoup** — a single mediasoup worker/router handles all rooms; each peer gets its own send + receive WebRTC transport pair, and tracks are forwarded server-side with no re-encoding.
+- **Full mediasoup signaling flow** — `sfu:join` → `sfu:createTransport` → `sfu:connectTransport` → `sfu:produce` → `sfu:consume` → `sfu:resume`, implemented cleanly over Socket.IO acknowledgements.
+- **STUN + self-hosted TURN** — ICE candidates include both Google STUN and a self-hosted TURN server so the app works across NAT/firewall-restricted networks.
+- **Graceful teardown** — clicking Leave or closing the tab closes all consumers, producers, and transports both client-side and server-side, preventing resource leaks in the mediasoup worker.
+- **Real-time in-room chat** — Socket.IO room-scoped chat with server-side history (last 50 messages) replayed to new joiners, with input validation and length caps.
 
 ---
 
-## Prerequisites
+## Tech Stack
 
-- Node.js 18+ recommended
-- Chrome / Edge for testing
-- On Windows, allow camera/microphone permissions in browser
+| Layer | Technology |
+|-------|-----------|
+| Frontend framework | React 19 + Vite |
+| Routing | React Router v7 |
+| WebRTC media (client) | mediasoup-client 3 |
+| Signaling | Socket.IO 4 |
+| Styling | Tailwind CSS + styled-components |
+| Icons | Lucide React |
+| Auth (optional) | Supabase |
+| Server runtime | Node.js 18+ |
+| HTTP server | Express 5 |
+| SFU engine | mediasoup 3 |
+| Codecs | VP8 (video) · Opus (audio) |
 
 ---
 
-## Environment Variables
+## How to Run Locally
 
-### Server (`/server/.env`)
+### Prerequisites
+
+- Node.js 18 or later
+- Chrome or Edge (required for WebRTC `getUserMedia`)
+- Camera and microphone
+
+### 1. Configure the server
+
 Create `server/.env`:
 
 ```env
@@ -81,123 +80,84 @@ PORT=5000
 CLIENT_ORIGINS=http://localhost:5173
 
 MEDIASOUP_LISTEN_IP=0.0.0.0
-# IMPORTANT:
-# - For same-machine local testing you may set:
-#   MEDIASOUP_ANNOUNCED_IP=127.0.0.1
-# - For LAN/deploy set it to your machine's LAN/public IP.
-MEDIASOUP_ANNOUNCED_IP=127.0.0.1
+MEDIASOUP_ANNOUNCED_IP=127.0.0.1   # use your LAN/public IP for multi-device testing
 
 RTC_MIN_PORT=40000
 RTC_MAX_PORT=49999
 ```
 
-### Client (`/client/.env.local`)
+### 2. Configure the client
+
 Create `client/.env.local`:
 
 ```env
 VITE_SIGNALING_URL=http://localhost:5000
-VITE_SUPABASE_URL=YOUR_SUPABASE_URL
+VITE_SUPABASE_URL=YOUR_SUPABASE_URL       # only needed if using the login page
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 ```
 
-Notes:
-- Supabase variables are required only for the login route/components; the meeting room itself uses Socket.IO + mediasoup.
+### 3. Start the server
 
----
-
-## Install & Run (Local)
-
-### 1) Start server
-```bat
-cd d:\codes\video-chat-v2\server
+```bash
+cd server
 npm install
 node index.js
+# → Server running on port 5000
+# Health check: http://localhost:5000/health
 ```
 
-Server should print:
-- `Server running on port 5000`
+### 4. Start the client
 
-Health check:
-- http://localhost:5000/health
-
-### 2) Start client
-```bat
-cd d:\codes\video-chat-v2\client
+```bash
+cd client
 npm install
 npm run dev
+# → http://localhost:5173
 ```
 
-Open:
-- http://localhost:5173
+### 5. Test a meeting
 
-### 3) Test meeting
-- Create a new meeting from Home
-- Open another tab/incognito and join the same room id
-- You should see remote tiles appear and audio play
+1. Open `http://localhost:5173` and click **New Meeting**.
+2. Open the same room URL in a second tab or incognito window.
+3. Allow camera/microphone — you should see remote video tiles appear and hear audio.
 
 ---
 
-## Deployment Notes (Important)
+## Architecture Overview
 
-### HTTPS is required
-Browsers require a secure context for camera/mic in production:
-- Frontend must be **https**
-- Signaling should be served over **https/wss** (often via reverse proxy)
+```
+client/
+  src/
+    pages/
+      Home.jsx          # Landing page — create or join a room
+      Room.jsx          # Core meeting room: SFU join/produce/consume + chat UI
+    components/
+      VideoTile.jsx     # Renders a MediaStream into a <video> element
+      AudioTile.jsx     # Renders remote audio into an <audio> element (separate from video to avoid echo)
+      PrivateRoute.jsx  # Auth guard for protected routes
+    supabase.js         # Supabase client initialisation
 
-### mediasoup IP + ports
-For real deployment / multi-device usage:
-- Set `MEDIASOUP_ANNOUNCED_IP` to the server **public IP** (or correct NAT public address).
-- Open UDP ports `RTC_MIN_PORT..RTC_MAX_PORT` on the firewall/security group.
-- If running behind NAT, correct announced IP is mandatory.
+server/
+  index.js             # Socket.IO signaling server + chat logic
+  mediasoup.js         # mediasoup worker / router / transport / peer lifecycle
+```
 
----
+**Media flow summary:**
 
-## Cleanup / Lifecycle Behavior
-
-- Clicking **Leave**:
-  - Calls `sfu:leave` (best effort)
-  - Closes consumers + producers + transports
-  - Stops local getUserMedia tracks
-  - Disconnects socket
-- On socket `disconnect`:
-  - Server removes user from chat room (legacy room list)
-  - Server calls mediasoup cleanup across rooms to close peer resources
-
----
-
-## Known Limitations (Current Stage)
-
-- Rooms and chat history are **in-memory** (lost on server restart).
-- No identity/roles yet (peers shown by socket id).
-- No TURN server configuration yet (may fail on restrictive networks without TURN).
-- No host controls, waiting room, screen share, recording (planned).
+1. Client emits `sfu:join` → server returns router RTP capabilities.
+2. Client creates a `Device`, then requests two WebRTC transports (send + recv).
+3. DTLS parameters are exchanged via `sfu:connectTransport`.
+4. Client calls `getUserMedia` and produces audio + video tracks via `sfu:produce`.
+5. Server broadcasts `sfu:newProducer` to other peers in the room.
+6. Other clients call `sfu:consume` to receive a paused consumer, then `sfu:resume` to start the media flow.
 
 ---
 
-## Next Planned Features (Roadmap)
+## Known Limitations / What I'd Improve
 
-Recommended next improvements:
-1. Host + waiting room (knock to join)
-2. Screen sharing (produce/replace track)
-3. Active speaker detection (audio level analysis)
-4. Connection quality & stats overlay
-5. Recording (SFU advantage)
-
----
-
-## Troubleshooting
-
-### “Video doesn’t show / audio silent”
-- Check browser console for:
-  - `[sendTransport] connectionstatechange: connected`
-  - `[recvTransport] connectionstatechange: connected`
-- Ensure `MEDIASOUP_ANNOUNCED_IP` is correct for your testing scenario:
-  - same machine: `127.0.0.1` often works
-  - other devices / deploy: must be LAN/public IP
-
-### “Audio autoplay blocked”
-Some browsers block autoplay audio until you interact with the page.
-- Click once on the page after joining.
-
----
-
+- **In-memory state** — rooms, peers, and chat history live only in the Node process; a server restart clears everything. A Redis store would fix this.
+- **Anonymous peers** — participants are identified only by their Socket.IO ID. Adding a proper identity/display-name system (backed by Supabase) would improve UX.
+- **No simulcast / SVC** — the SFU forwards a single quality layer. Adding simulcast would allow adaptive bitrate for viewers on poor connections.
+- **No host controls** — anyone with the room link can join; there is no waiting room, knock-to-join, or mute-all.
+- **No screen sharing** — the producer track could be replaced with a `getDisplayMedia` track, but this is not yet implemented.
+- **No recording** — one of the main advantages of an SFU is server-side recording; this is a natural next step.
